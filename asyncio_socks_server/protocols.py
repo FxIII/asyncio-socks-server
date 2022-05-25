@@ -63,9 +63,9 @@ class LocalTCP(asyncio.Protocol):
 
     @staticmethod
     def gen_reply(
-        rep: SocksRep,
-        bind_host: str = "0.0.0.0",
-        bind_port: int = 0,
+            rep: SocksRep,
+            bind_host: str = "0.0.0.0",
+            bind_port: int = 0,
     ) -> bytes:
         """Generate reply for negotiation."""
 
@@ -174,6 +174,7 @@ class LocalTCP(asyncio.Protocol):
             # Step 2.2
             # The server handles the command and returns a reply.
             if CMD == SocksCommand.CONNECT:
+                DST_ADDR, DST_PORT = self.detour(DST_ADDR, DST_PORT)
                 try:
                     loop = asyncio.get_event_loop()
                     task = loop.create_connection(
@@ -234,7 +235,7 @@ class LocalTCP(asyncio.Protocol):
 
                     self.config.ACCESS_LOG and access_logger.info(
                         f"Established UDP relay for {self.peername} "
-                        f"at {bind_addr,bind_port}"
+                        f"at {bind_addr, bind_port}"
                     )
             else:
                 self.transport.write(self.gen_reply(SocksRep.COMMAND_NOT_SUPPORTED))
@@ -283,6 +284,27 @@ class LocalTCP(asyncio.Protocol):
         self.config.ACCESS_LOG and access_logger.debug(
             f"Closed LocalTCP connection from {self.peername}"
         )
+
+    # noinspection PyMethodMayBeStatic
+    def detour(self, DST_ADDR, DST_PORT):
+        self.config.ACCESS_LOG and access_logger.debug(
+            f"Testing detour {DST_ADDR}:{DST_PORT}"
+        )
+        if f"{DST_ADDR}:{DST_PORT}" in self.config.DETOURS:
+            self.config.ACCESS_LOG and access_logger.debug(
+                f"Found detour {DST_ADDR}:{DST_PORT}"
+            )
+            self.config.ACCESS_LOG and access_logger.debug(
+                self.config.DETOUR_HANDLER
+            )
+            handler = self.config.DETOURS[f"{DST_ADDR}:{DST_PORT}"]
+            target = self.config.DETOUR_HANDLER.get(handler, f"{DST_ADDR}:{DST_PORT}")
+            DST_ADDR, DST_PORT = target.split(":")
+            DST_PORT = int(DST_PORT)
+            self.config.ACCESS_LOG and access_logger.debug(
+                f"Detour made to {DST_ADDR}:{DST_PORT}"
+            )
+        return DST_ADDR, DST_PORT
 
 
 class RemoteTCP(asyncio.Protocol):
@@ -374,30 +396,30 @@ class LocalUDP(asyncio.DatagramProtocol):
         """
 
         length = 0
-        RSV = data[length : length + 2]
+        RSV = data[length: length + 2]
         length += 2
-        FRAG = data[length : length + 1]
+        FRAG = data[length: length + 1]
         if int.from_bytes(FRAG, "big") != 0:
             raise HeaderParseError("Received unsupported FRAG value")
         length += 1
-        ATYP = int.from_bytes(data[length : length + 1], "big")
+        ATYP = int.from_bytes(data[length: length + 1], "big")
         length += 1
         if ATYP == SocksAtyp.IPV4:
-            ipv4 = data[length : length + 4]
+            ipv4 = data[length: length + 4]
             DST_ADDR = inet_ntop(AF_INET, ipv4)
             length += 4
         elif ATYP == SocksAtyp.DOMAIN:
-            addr_len = int.from_bytes(data[length : length + 1], byteorder="big")
+            addr_len = int.from_bytes(data[length: length + 1], byteorder="big")
             length += 1
-            DST_ADDR = data[length : length + addr_len].decode()
+            DST_ADDR = data[length: length + addr_len].decode()
             length += addr_len
         elif ATYP == SocksAtyp.IPV6:
-            ipv6 = data[length : length + 16]
+            ipv6 = data[length: length + 16]
             DST_ADDR = inet_ntop(AF_INET6, ipv6)
             length += 16
         else:
             raise HeaderParseError(f"Received unsupported ATYP value: {ATYP}")
-        DST_PORT = int.from_bytes(data[length : length + 2], "big")
+        DST_PORT = int.from_bytes(data[length: length + 2], "big")
         length += 2
         if length > len(data):
             raise HeaderParseError("Header is too short")

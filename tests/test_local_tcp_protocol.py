@@ -156,9 +156,8 @@ def test_negotiate_with_invalid_atyp(local_tcp_after_no_auth):
     ],
 )
 def test_negotiate_with_connect_exceptions(
-    local_tcp_after_no_auth, exception, status: SocksRep
+        local_tcp_after_no_auth, exception, status: SocksRep
 ):
-
     # VER, CMD, RSV = b"\x05\x01\x00"
     local_tcp_after_no_auth.data_received(b"\x05\x01\x00")
     ATYP = SocksAtyp.IPV4
@@ -199,7 +198,7 @@ def test_negotiate_with_connect_exceptions(
     ],
 )
 def test_negotiate_with_udp_associate_exception(
-    local_tcp_after_no_auth, exception, status: SocksRep
+        local_tcp_after_no_auth, exception, status: SocksRep
 ):
     # VER, CMD, RSV = b"\x05\x03\x00"
     local_tcp_after_no_auth.data_received(b"\x05\x03\x00")
@@ -265,6 +264,43 @@ def test_negotiate_with_connect(local_tcp_after_no_auth):
         LocalTCP.gen_reply(SocksRep.SUCCEEDED, bind_addr, bind_port)
     )
     assert local_tcp_after_no_auth.remote_tcp is mock_remote_tcp
+    assert loop.create_connection.call_args[0][1:] == ("127.0.0.1", 80)
+
+
+def request_connect(local_tcp, address, port):
+    local_tcp.data_received(b"\x05\x01\x00")
+    ATYP = SocksAtyp.IPV4
+    local_tcp.data_received(int.to_bytes(ATYP, 1, "big"))
+    # DST_ADDR, DST_PORT = "127.0.0.1", 80
+    local_tcp.data_received(inet_pton(AF_INET, address))
+    local_tcp.data_received(int.to_bytes(port, 2, "big"))
+
+
+def test_negotiate_with_connect_and_detour(local_tcp_after_no_auth):
+    """it should connect to a different addess/port"""
+    local_tcp_after_no_auth.config.DETOURS["127.0.0.2:80"] = "handler1"
+
+    local_tcp_after_no_auth.config.DETOUR_HANDLER["handler1"] = '127.0.0.1:2080'
+
+    request_connect(local_tcp_after_no_auth, address="127.0.0.2", port=80)
+
+    loop = asyncio.get_event_loop()
+    patcher_create_connection = patch.object(loop, "create_connection")
+    patcher_wait_for = patch("asyncio.wait_for")
+
+    patcher_create_connection.start()
+    mock_wait_for = patcher_wait_for.start()
+
+    mock_remote_tcp = Mock()
+    mock_remote_tcp_transport = Mock()
+    mock_remote_tcp_transport.get_extra_info = Mock(return_value=("0.0.0.0", 9999))
+    mock_wait_for.return_value = (mock_remote_tcp_transport, mock_remote_tcp)
+    asyncio.get_event_loop().run_until_complete(local_tcp_after_no_auth.negotiate_task)
+
+    # patcher_create_connection.stop()
+    # patcher_wait_for.stop()
+
+    assert loop.create_connection.call_args[0][1:] == ("127.0.0.1", 2080)
 
 
 def test_negotiate_with_udp_associate(local_tcp_after_no_auth):
@@ -330,7 +366,7 @@ def local_tcp_after_username_password_auth(mock_transport):
 
 
 def test_negotiate_with_connect_and_username_password_auth(
-    local_tcp_after_username_password_auth,
+        local_tcp_after_username_password_auth,
 ):
     # VER, CMD, RSV = b"\x05\x01\x00"
     local_tcp_after_username_password_auth.data_received(b"\x05\x01\x00")

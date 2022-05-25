@@ -14,6 +14,7 @@ A SOCKS proxy server implemented with the powerful python cooperative concurrenc
 - Supports username/password authentication
 - Provides optional strict mode that follows [RFC1928](https://www.ietf.org/rfc/rfc1928.txt) and [RFC1929](https://www.ietf.org/rfc/rfc1929.txt) without compromise
 - Driven by the python standard library, no third-party dependencies
+- Supports connection hijack 
 
 ## Installation
 Install with pip if Python version 3.8.0 or higher is available.
@@ -66,6 +67,13 @@ You can also list other options in the config file instead of the command：
     "username1": "password1",
     "username2": "password2",
     "username3": "password3"
+  },
+  "DETOURS": {
+    "93.184.216.34:80": "my_handler",
+    "example.com:80": "my_handler",
+  },
+  "DETOUR_HANDLER": {
+    "my_handler": "127.0.0.1:8080"
   }
 }
 

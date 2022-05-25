@@ -24,6 +24,8 @@ DEFAULT_CONFIG = {
     "STRICT": False,
     "DEBUG": False,
     "USERS": {},
+    "DETOURS": {},
+    "DETOUR_HANDLER": {}
 }
 
 
@@ -35,6 +37,8 @@ class Config(dict):
     STRICT: bool
     DEBUG: bool
     USERS: dict
+    DETOURS: dict
+    DETOUR_HANDLER: dict
 
     def __init__(self):
         super().__init__({**DEFAULT_CONFIG})
